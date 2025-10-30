@@ -185,15 +185,30 @@ class PDFImageExtractor:
         """Main extraction method"""
         pdf = None
         try:
+            print(f"📖 Opening PDF: {self.pdf_path}")
+            
+            # Check if file exists and has content
+            if not os.path.exists(self.pdf_path):
+                raise Exception(f"PDF file not found: {self.pdf_path}")
+            
+            file_size = os.path.getsize(self.pdf_path)
+            if file_size == 0:
+                raise Exception("PDF file is empty")
+                
+            print(f"📄 PDF file size: {file_size} bytes")
+            
             pdf = fitz.open(self.pdf_path)
             image_data = []
             fin_number = "Not found"
             expiry_dates = {"ethiopian": "Not found", "gregorian": "Not found"}
             profile_image_processed = False
 
+            print(f"📑 PDF has {len(pdf)} pages")
+            
             for page_num in range(len(pdf)):
                 page = pdf.load_page(page_num)
                 images = page.get_images(full=True)
+                print(f"🖼️ Page {page_num + 1}: {len(images)} images found")
 
                 for img_index, img in enumerate(images):
                     xref = img[0]
@@ -201,6 +216,7 @@ class PDFImageExtractor:
                     
                     if base_image and base_image.get("image"):
                         image_bytes = base_image["image"]
+                        print(f"  📸 Image {img_index + 1}: {len(image_bytes)} bytes")
                         
                         # Check if this might be a profile picture (first large image)
                         if not profile_image_processed and len(image_bytes) > 10000:  # > 10KB
@@ -229,25 +245,28 @@ class PDFImageExtractor:
                                     })
 
                             except Exception as e:
-                                print(f"Image processing error: {e}")
+                                print(f"⚠️ Image processing error: {e}")
                                 continue
 
                         # OCR on first image for data extraction
                         if len(image_data) == 1:
                             try:
                                 with Image.open(io.BytesIO(image_bytes)) as img_pil:
+                                    print("🔍 Performing OCR on first image...")
                                     ocr_text = pytesseract.image_to_string(img_pil, lang='eng')
+                                    print(f"📝 OCR text length: {len(ocr_text)} characters")
                                     fin_number = self.extract_fin_number(ocr_text)
                                     expiry_dates = self.extract_expiry_date(ocr_text)
+                                    print(f"📊 Extracted FIN: {fin_number}")
                             except Exception as e:
-                                print(f"OCR error: {e}")
+                                print(f"⚠️ OCR error: {e}")
 
-            print(f"✅ Extraction complete: {len(image_data)} images, rembg: {REMBG_AVAILABLE}")
+            print(f"✅ Extraction complete: {len(image_data)} images processed")
             return image_data, fin_number, expiry_dates
 
         except Exception as e:
-            print(f"PDF processing error: {e}")
-            return [], "Error processing PDF", {"ethiopian": "Error", "gregorian": "Error"}
+            print(f"❌ PDF processing error: {e}")
+            return [], f"Error: {str(e)}", {"ethiopian": "Error", "gregorian": "Error"}
         finally:
             if pdf:
                 pdf.close()
@@ -255,45 +274,74 @@ class PDFImageExtractor:
 # --- API Endpoint ---
 @app.route('/api/extract_images', methods=['POST'])
 def extract_images_from_pdf():
-    print("🔍 API endpoint called")
+    print("🔍 API endpoint called - checking request...")
+    print(f"📨 Request method: {request.method}")
+    print(f"📦 Request files: {list(request.files.keys())}")
     
     if 'pdf' not in request.files:
+        print("❌ No 'pdf' in request.files")
         return jsonify({'error': 'No PDF file provided'}), 400
     
     file = request.files['pdf']
+    print(f"📄 File received: {file.filename}")
+    print(f"📏 File content length: {file.content_length}")
+    print(f"📋 File content type: {file.content_type}")
+    
     if file.filename == '':
+        print("❌ Empty filename")
         return jsonify({'error': 'No file selected'}), 400
 
     if not file.filename.lower().endswith('.pdf'):
+        print(f"❌ Not a PDF file: {file.filename}")
         return jsonify({'error': 'Only PDF files are supported'}), 400
 
+    file_path = None
     try:
-        # Save file temporarily
+        # Save file temporarily with better error handling
         filename = secure_filename(file.filename)
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(file_path)
+        print(f"💾 Saving file to: {file_path}")
+        
+        # Read file content first to check if it's empty
+        file_data = file.read()
+        if len(file_data) == 0:
+            raise Exception("Uploaded file is empty")
+            
+        # Write to file
+        with open(file_path, 'wb') as f:
+            f.write(file_data)
+        
+        print(f"✅ File saved successfully: {os.path.getsize(file_path)} bytes")
         
         # Process PDF
+        print("🔄 Starting PDF processing...")
         extractor = PDFImageExtractor(file_path)
         images, fin_number, expiry_dates = extractor.extract_images()
+        
+        print(f"🎉 Processing complete: {len(images)} images, FIN: {fin_number}")
         
         return jsonify({
             'images': images,
             'fin_number': fin_number,
             'expiry_date': expiry_dates,
             'message': 'Processing complete',
-            'rembg_available': REMBG_AVAILABLE
+            'rembg_available': REMBG_AVAILABLE,
+            'images_count': len(images)
         })
         
     except Exception as e:
+        print(f"❌ Processing failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': f'Processing failed: {str(e)}'}), 500
     finally:
         # Clean up
-        if os.path.exists(file_path):
+        if file_path and os.path.exists(file_path):
             try:
                 os.remove(file_path)
-            except:
-                pass
+                print(f"🧹 Cleaned up temporary file: {file_path}")
+            except Exception as e:
+                print(f"⚠️ Cleanup error: {e}")
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
