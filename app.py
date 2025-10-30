@@ -187,5 +187,7 @@ def extract_images_from_pdf():
                 pass
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
+    # Railway provides PORT environment variable - use it!
+    port = int(os.environ.get('PORT', 8080))  # ⬅️ CHANGED to 8080 default
+    print(f"🚀 Starting server on port {port}")
     app.run(host='0.0.0.0', port=port, debug=False)
