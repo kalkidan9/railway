@@ -12,3 +12,15 @@ cmds = [
 
 [start]
 cmd = "python app.py"
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "python app.py"
+
+[[services]]
+name = "web"
+startCommand = "python app.py"
+
+[services.env]
+PORT = "8080"
