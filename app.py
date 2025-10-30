@@ -17,11 +17,12 @@ CORS(app)
 # Configuration
 UPLOAD_FOLDER = '/tmp/uploads'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
 
 # Create upload folder
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Configure Tesseract
+# Configure Tesseract for Railway
 try:
     pytesseract.get_tesseract_version()
 except:
@@ -32,7 +33,8 @@ except:
 def home():
     return jsonify({
         'message': 'Ethiopian ID Processor API', 
-        'status': 'running'
+        'status': 'running',
+        'version': '1.0'
     })
 
 @app.route('/api/health', methods=['GET'])
@@ -64,7 +66,7 @@ class PDFImageExtractor:
                     
                     cleaned_fin = re.sub(r'\D', '', fin_candidate)
                     if len(cleaned_fin) == 12:
-                        return cleaned_fin
+                        return f"{cleaned_fin[:4]} {cleaned_fin[4:8]} {cleaned_fin[8:12]}"
             
             return "Not found"
         except Exception as e:
@@ -121,7 +123,7 @@ class PDFImageExtractor:
                                 img_pil.save(img_byte_arr, format=img_format)
                                 
                                 image_data.append({
-                                    "label": f"Page {page_num + 1} - Image {img_index + 1}",
+                                    "label": f"Image {len(image_data) + 1}",
                                     "data": f"data:image/{img_format};base64,{base64.b64encode(img_byte_arr.getvalue()).decode('utf-8')}"
                                 })
 
