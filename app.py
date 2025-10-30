@@ -343,7 +343,4 @@ def extract_images_from_pdf():
             except Exception as e:
                 print(f"⚠️ Cleanup error: {e}")
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8080))
-    print(f"🚀 Starting server on port {port}, rembg: {REMBG_AVAILABLE}")
-    app.run(host='0.0.0.0', port=port, debug=False)
+
